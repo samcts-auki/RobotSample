@@ -34,6 +34,7 @@ public class MainFragment extends BaseFragment {
     private Button mLocation_scene;
     private Button mNavigation_scene;
     private Button mAudio_scene;
+    private Button mCamera_scene;
     private Button mElectricDoorControl;
     private Button mExit;
     private Button mXBack;
@@ -55,6 +56,7 @@ public class MainFragment extends BaseFragment {
         mLocation_scene = (Button) root.findViewById(R.id.location_scene);
         mNavigation_scene = (Button) root.findViewById(R.id.navigation_scene);
         mAudio_scene = (Button) root.findViewById(R.id.audio_scene);
+        mCamera_scene = (Button) root.findViewById(R.id.camera_scene);
         root.findViewById(R.id.electric_door_control).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -135,6 +137,11 @@ public class MainFragment extends BaseFragment {
             public void onClick(View v) {
                 switchFragment(AudioFragment.newInstance());
             }
+        });
+
+        mCamera_scene.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { switchFragment(CameraFragment.newInstance()); }
         });
     }
 

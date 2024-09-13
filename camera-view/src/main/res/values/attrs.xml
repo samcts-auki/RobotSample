@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="CameraView">
+        <attr name="quality" format="enum">
+            <enum name="max" value="0"/>
+            <enum name="high" value="1"/>
+            <enum name="medium" value="2"/>
+            <enum name="low" value="3"/>
+        </attr>
+        <attr name="maxVideoDuration" format="integer" />
+        <attr name="maxVideoSize" format="integer" />
+        <attr name="flash" format="enum">
+            <enum name="auto" value="0"/>
+            <enum name="on" value="1"/>
+            <enum name="off" value="2"/>
+        </attr>
+        <attr name="confirmImages" format="boolean" />
+        <attr name="confirmVideos" format="boolean" />
+        <attr name="pinchToZoomEnabled" format="boolean" />
+        <attr name="matchPreviewAspectRatio" format="boolean" />
+        <attr name="lensFacing" format="enum">
+            <enum name="back" value="0"/>
+            <enum name="front" value="1"/>
+        </attr>
+    </declare-styleable>
+    <declare-styleable name="VideoView">
+        <attr name="filePath" format="string" />
+    </declare-styleable>
+</resources>
