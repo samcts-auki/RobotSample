@@ -1,84 +1,56 @@
 package com.ainirobot.robotos.fragment;
 
 import android.Manifest;
-import android.animation.ValueAnimator;
-import android.annotation.SuppressLint;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.graphics.Rect;
-import android.hardware.Camera;
+//import android.hardware.Camera;
 import android.hardware.display.DisplayManager;
-import android.media.AudioFormat;
 import android.net.Uri;
-import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.os.Handler;
-import android.os.Message;
-import android.os.Vibrator;
-import android.text.format.DateFormat;
 import android.util.Log;
-import android.view.Display;
-import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 
-import android.view.ViewConfiguration;
-import android.view.ViewGroup;
-import android.view.animation.LinearInterpolator;
 import android.widget.Button;
-import android.widget.ImageView;
-import android.widget.CompoundButton;
-import android.widget.ProgressBar;
-import android.widget.TextView;
-import android.widget.Toast;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.Formatter;
-import java.util.Locale;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresPermission;
 import androidx.fragment.app.Fragment;
 
 import com.ainirobot.robotos.LogTools;
 import com.ainirobot.robotos.R;
-import com.ainirobot.robotos.audio.AudioManager;
-import android.net.Uri;
+
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.ImageView;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.FileProvider;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 
 public class CameraFragment extends BaseFragment {
 
-    private ImageView imageView;
-    private Uri photoUri;
-    private File photoFile;
+    private static final int CAMERA_REQUEST_CODE = 1001;
+    private PreviewView previewView;
+    private ImageCapture imageCapture;
+    private ExecutorService cameraExecutor;
 
     public static Fragment newInstance() {
         return new CameraFragment();
@@ -100,43 +72,75 @@ public class CameraFragment extends BaseFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        previewView = view.findViewById(R.id.previewView);
+        Button captureButton = view.findViewById(R.id.captureButton);
 
-        Button btnCaptureImage = view.findViewById(R.id.btnCaptureImage);
-        imageView = view.findViewById(R.id.imageView);
+        cameraExecutor = Executors.newSingleThreadExecutor();
 
-        // Register the activity result launcher for taking pictures
-        ActivityResultLauncher<Uri> takePictureLauncher = registerForActivityResult(
-                new ActivityResultContracts.TakePicture(),
-                result -> {
-                    if (result) {
-                        imageView.setImageURI(photoUri);
-                    }
-                }
-        );
+        // Request camera permission
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(requireActivity(), new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
+        } else {
+            startCamera();
+        }
 
-        btnCaptureImage.setOnClickListener(v -> {
+        // Capture image on button click
+        captureButton.setOnClickListener(v -> takePhoto());
+    }
+
+    private void startCamera() {
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext());
+
+        cameraProviderFuture.addListener(() -> {
             try {
-                // Create a unique file to store the image
-                photoFile = createImageFile();
-                photoUri = FileProvider.getUriForFile(
-                        requireContext(),
-                        "com.ainirobot.robotos.fragment",
-                        photoFile);
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
 
-                // Launch the camera
-                takePictureLauncher.launch(photoUri);
-            } catch (IOException e) {
-                e.printStackTrace();
+                // Preview UseCase
+                Preview preview = new Preview.Builder().build();
+                preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+                // ImageCapture UseCase
+                imageCapture = new ImageCapture.Builder().build();
+
+                // Select back camera
+                CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+
+                // Unbind use cases before rebinding
+                cameraProvider.unbindAll();
+
+                // Bind use cases to the camera
+                Camera camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
+
+            } catch (Exception e) {
+                Log.e("CameraX", "Use case binding failed", e);
+            }
+        }, ContextCompat.getMainExecutor(requireContext()));
+    }
+
+    private void takePhoto() {
+        if (imageCapture == null) return;
+
+        File photoFile = new File(requireContext().getExternalFilesDir(null), "photo_" + System.currentTimeMillis() + ".jpg");
+
+        ImageCapture.OutputFileOptions outputOptions = new ImageCapture.OutputFileOptions.Builder(photoFile).build();
+
+        imageCapture.takePicture(outputOptions, ContextCompat.getMainExecutor(requireContext()), new ImageCapture.OnImageSavedCallback() {
+            @Override
+            public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
+                Log.d("CameraX", "Photo capture succeeded: " + photoFile.getAbsolutePath());
+            }
+
+            @Override
+            public void onError(@NonNull ImageCaptureException exception) {
+                Log.e("CameraX", "Photo capture failed: ", exception);
             }
         });
     }
 
-    // Helper method to create a file for storing the captured image
-    private File createImageFile() throws IOException {
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
-        String imageFileName = "JPEG_" + timeStamp + "_";
-        File storageDir = requireActivity().getExternalFilesDir(null);
-        return File.createTempFile(imageFileName, ".jpg", storageDir);
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        cameraExecutor.shutdown();
     }
-
 }
