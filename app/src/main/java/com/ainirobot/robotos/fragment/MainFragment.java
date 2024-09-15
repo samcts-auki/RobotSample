@@ -32,12 +32,15 @@ public class MainFragment extends BaseFragment {
     private Button mVision_scene;
     private Button mCharge_scene;
     private Button mLocation_scene;
+    private Button mNav_scene;
     private Button mNavigation_scene;
     private Button mAudio_scene;
     private Button mCamera_scene;
     private Button mElectricDoorControl;
     private Button mExit;
     private Button mXBack;
+    private Button mPhotoTask_scene;
+
     @Override
     public View onCreateView(Context context) {
         View root = mInflater.inflate(R.layout.fragment_main_layout,null,false);
@@ -54,9 +57,12 @@ public class MainFragment extends BaseFragment {
         mVision_scene = (Button) root.findViewById(R.id.vision_scene);
         mCharge_scene = (Button) root.findViewById(R.id.charge_scene);
         mLocation_scene = (Button) root.findViewById(R.id.location_scene);
+        mNav_scene = (Button) root.findViewById(R.id.nav_scene);
         mNavigation_scene = (Button) root.findViewById(R.id.navigation_scene);
         mAudio_scene = (Button) root.findViewById(R.id.audio_scene);
         mCamera_scene = (Button) root.findViewById(R.id.camera_scene);
+        mPhotoTask_scene = (Button) root.findViewById(R.id.photo_task_scene);
+
         root.findViewById(R.id.electric_door_control).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -121,7 +127,13 @@ public class MainFragment extends BaseFragment {
             @Override
             public void onClick(View v) {
             switchFragment(NavigationFragment.newInstance());
-//                switchFragment(NavFragment.newInstance());
+            }
+        });
+
+        mNav_scene.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switchFragment(NavFragment.newInstance());
             }
         });
 
@@ -142,6 +154,11 @@ public class MainFragment extends BaseFragment {
         mCamera_scene.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { switchFragment(CameraFragment.newInstance()); }
+        });
+
+        mPhotoTask_scene.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { switchFragment(PhotoTaskFragment.newInstance()); }
         });
     }
 

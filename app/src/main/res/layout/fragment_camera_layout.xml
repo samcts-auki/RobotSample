@@ -24,24 +24,10 @@
             android:layout_margin="16dp" />
 
         <Button
-            android:id="@+id/start_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/camera_selector_spinner"
-            android:text="Start" />
-
-        <Button
-            android:id="@+id/stop_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/start_button"
-            android:text="Stop" />
-
-        <Button
             android:id="@+id/captureButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@id/stop_button"
+            android:layout_below="@id/camera_selector_spinner"
             android:text="Capture" />
 
     </LinearLayout>

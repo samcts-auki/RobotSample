@@ -13,6 +13,7 @@ import android.widget.Spinner;
 import android.widget.ArrayAdapter;
 import android.widget.Toast;
 import android.widget.Button;
+import android.widget.AdapterView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,6 +23,9 @@ import com.ainirobot.robotos.R;
 
 import android.content.pm.PackageManager;
 
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
@@ -45,14 +49,17 @@ public class CameraFragment extends BaseFragment {
     private static final int CAMERA_REQUEST_CODE = 1001;
 
     private Spinner cameraSelectorSpinner;
-    private Button startButton, stopButton, captureButton;
+    private Button captureButton;
     private PreviewView previewView;
+
     private ProcessCameraProvider cameraProvider;
     private Preview preview;
     private ImageCapture imageCapture;
-    private List<String> availableCameras = new ArrayList<>();
-    private List<CameraSelector> cameraSelectors = new ArrayList<>();
+    private ArrayList<String> cameraList = new ArrayList<>();
+    private ArrayList<String> cameraIdList = new ArrayList<>(); // Holds camera IDs for later use
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
+    private CameraSelector cameraSelector;
+
     private ExecutorService cameraExecutor;
 
     public static Fragment newInstance() {
@@ -84,8 +91,6 @@ public class CameraFragment extends BaseFragment {
 
         // Initialize UI elements
         cameraSelectorSpinner = view.findViewById(R.id.camera_selector_spinner);
-        startButton = view.findViewById(R.id.start_button);
-        stopButton = view.findViewById(R.id.stop_button);
         captureButton = view.findViewById(R.id.captureButton);
         previewView = view.findViewById(R.id.previewView);
 
@@ -94,74 +99,115 @@ public class CameraFragment extends BaseFragment {
 
         // Get the camera provider instance
         cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext());
+
+        getAvailableCameras();
+
+        // Listen for spinner selections
+        cameraSelectorSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String selectedCameraId = cameraIdList.get(position);
+                switchCamera(selectedCameraId); // Start the selected camera by its ID
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // Do nothing
+            }
+        });
+
+        // Bind the camera lifecycle to this fragment
         cameraProviderFuture.addListener(() -> {
             try {
                 cameraProvider = cameraProviderFuture.get();
-                setupCameraSelector();
+                if (!cameraIdList.isEmpty()) {
+                    // Start the first camera by default
+                    switchCamera(cameraIdList.get(0));
+                }
             } catch (ExecutionException | InterruptedException e) {
-                Log.e("CameraXApp", "Error retrieving camera provider", e);
+                e.printStackTrace();
             }
         }, ContextCompat.getMainExecutor(requireContext()));
-
-        // Handle the Start button
-        startButton.setOnClickListener(v -> startCamera());
-
-        // Handle the Stop button
-        stopButton.setOnClickListener(v -> stopCamera());
 
         // Capture image on button click
         captureButton.setOnClickListener(v -> takePhoto());
 
     }
 
-    private void setupCameraSelector() {
-        // Retrieve all available camera infos and populate the spinner
-        for (CameraSelector cameraSelector : getAvailableCameras()) {
-            availableCameras.add(cameraSelector.toString());
-            cameraSelectors.add(cameraSelector);
+    private void getAvailableCameras() {
+        CameraManager cameraManager = (CameraManager) requireActivity().getSystemService(Context.CAMERA_SERVICE);
+
+        try {
+            // Get the list of camera IDs
+            String[] cameraIds = cameraManager.getCameraIdList();
+
+            for (String cameraId : cameraIds) {
+                CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+
+                // Check if the camera is front or rear
+                int lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                String cameraName = "";
+
+                if (lensFacing == CameraCharacteristics.LENS_FACING_BACK) {
+                    cameraName = "Rear Camera (" + cameraId + ")";
+                } else if (lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+                    cameraName = "Front Camera (" + cameraId + ")";
+                } else {
+                    cameraName = "External Camera (" + cameraId + ")";
+                }
+
+                // Add the camera name to the list
+                cameraList.add(cameraName);
+                cameraIdList.add(cameraId); // Store the camera ID for later use
+            }
+
+            // Populate the spinner with the camera names
+            ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(getActivity(), android.R.layout.simple_spinner_item, cameraList);
+            spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            cameraSelectorSpinner.setAdapter(spinnerAdapter);
+
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void switchCamera(String cameraId) {
+        if (cameraProvider != null) {
+            // Unbind any existing use cases before rebinding
+            cameraProvider.unbindAll();
         }
 
-        // Set up the Spinner with the available camera options
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, availableCameras);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        cameraSelectorSpinner.setAdapter(adapter);
-    }
+        // Set up the preview use case to show the camera preview
+        Preview preview = new Preview.Builder().build();
 
-    private List<CameraSelector> getAvailableCameras() {
-        // Populate available camera selectors (e.g., front, back, or more specific)
-        List<CameraSelector> selectors = new ArrayList<>();
-        selectors.add(CameraSelector.DEFAULT_BACK_CAMERA);
-        selectors.add(CameraSelector.DEFAULT_FRONT_CAMERA);
+        // Use CameraSelector to select the camera by its lens facing direction
+        cameraSelector = new CameraSelector.Builder()
+                .requireLensFacing(getLensFacingFromCameraId(cameraId))
+                .build();
 
-        // You can add more custom selectors if your device has more than two cameras
-        // Add your custom CameraSelector logic here, if needed
-        return selectors;
-    }
-
-    private void startCamera() {
-        if (cameraProvider == null) return;
-
-        // Get the selected camera index
-        int selectedCameraIndex = cameraSelectorSpinner.getSelectedItemPosition();
-        CameraSelector cameraSelector = cameraSelectors.get(selectedCameraIndex);
-
-        // Build the camera preview
-        preview = new Preview.Builder().build();
-
-        // Attach preview to PreviewView
+        // Connect the preview to the preview view
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
         // Build the imageCapture
         imageCapture = new ImageCapture.Builder().build();
 
         // Bind the camera to the lifecycle
-        cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
+        try {
+            cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    private void stopCamera() {
-        // Unbind all camera use cases
-        if (cameraProvider != null) {
-            cameraProvider.unbindAll();
+    // Helper method to map cameraId to CameraSelector (lensFacing)
+    private int getLensFacingFromCameraId(String cameraId) {
+        try {
+            CameraManager cameraManager = (CameraManager) requireActivity().getSystemService(Context.CAMERA_SERVICE);
+            CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+            return characteristics.get(CameraCharacteristics.LENS_FACING);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+            return CameraCharacteristics.LENS_FACING_BACK; // Default to rear camera
         }
     }
 

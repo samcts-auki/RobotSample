@@ -4,6 +4,7 @@
     <string name="sdk_info">SDK Sample</string>
     <string name="basic_scene">Basic scene</string>
     <string name="navigation">Navigation</string>
+    <string name="nav">Nav</string>
     <string name="basic_sport">Basic Motion</string>
     <string name="visual_ability">Visual ability</string>
     <string name="speech_ability">Speech ability</string>
