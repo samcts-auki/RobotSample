@@ -8,43 +8,37 @@
     android:padding="16dp">
 
     <!-- Left Section: ScrollView to allow scrolling for dynamically added buttons -->
+
+    <!-- Right Section: Contains a single spinner -->
+
     <ScrollView
         android:id="@+id/scroll_view"
-        android:layout_width="0dp"
+        android:layout_width="503dp"
         android:layout_height="match_parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/spinner_container"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintWidth_percent="0.8"> <!-- 80% width -->
+        android:layout_gravity="left"
+        android:gravity="left"> <!-- 80% width -->
 
         <!-- LinearLayout inside ScrollView for dynamically added buttons -->
         <LinearLayout
             android:id="@+id/button_container"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="16dp">
-        </LinearLayout>
+            android:padding="16dp"></LinearLayout>
 
     </ScrollView>
 
-    <!-- Right Section: Contains a single spinner -->
     <LinearLayout
         android:id="@+id/spinner_container"
-        android:layout_width="0dp"
+        android:layout_width="80dp"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:padding="16dp"
-        app:layout_constraintStart_toEndOf="@+id/scroll_view"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintWidth_percent="0.2"> <!-- 20% width -->
+        android:layout_gravity="right"
+        android:gravity="right"
+        android:orientation="vertical"> <!-- 20% width -->
 
         <!-- Spinner in the right section -->
         <Spinner
-            android:id="@+id/spinner"
+            android:id="@+id/camera_selector_spinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
     </LinearLayout>

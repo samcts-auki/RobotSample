@@ -1,10 +1,10 @@
 package com.ainirobot.robotos.fragment;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.Manifest;
 import android.content.Context;
-//import android.hardware.Camera;
-import android.hardware.display.DisplayManager;
-import android.net.Uri;
+import android.util.Base64;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -36,9 +36,18 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.List;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -61,6 +70,9 @@ public class CameraFragment extends BaseFragment {
     private CameraSelector cameraSelector;
 
     private ExecutorService cameraExecutor;
+
+    // Example Java array
+    private static final String SERVER_URL = "http://192.168.8.148:8080"; // Replace with your server's URL
 
     public static Fragment newInstance() {
         return new CameraFragment();
@@ -226,7 +238,8 @@ public class CameraFragment extends BaseFragment {
             public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
                 String msg = "Photo captured: " + photoFile.getAbsolutePath();
                 Log.d("CameraXApp", msg);
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+//                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+                uploadImage(photoFile);
             }
 
             @Override
@@ -236,6 +249,78 @@ public class CameraFragment extends BaseFragment {
             }
         });
     }
+
+    // Method to encode the image file into a Base64 string
+    private String encodeImageToBase64(File imageFile) throws IOException {
+        FileInputStream fis = new FileInputStream(imageFile);
+        Bitmap bitmap = BitmapFactory.decodeStream(fis);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos); // Compress the bitmap into JPEG format
+        byte[] imageBytes = baos.toByteArray();
+        return Base64.encodeToString(imageBytes, Base64.DEFAULT); // Encode to Base64
+    }
+
+    private void uploadImage(File imageFile) {
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        JSONObject payload = new JSONObject();
+        executor.execute(() -> {
+            try {
+                // Convert image to Base64 string
+                String base64Image = encodeImageToBase64(imageFile);
+
+                // Prepare JSON object
+                JSONObject metaData = new JSONObject();
+                try {
+                    metaData.put("camera_id",  "camera_1");
+                    metaData.put("waypoint_id", 0);
+                    metaData.put("pose", null);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+
+                try {
+                    payload.put("metadata", metaData);
+                    payload.put("image", base64Image);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                // Send JSON object to the server
+                sendJsonToServer(payload);
+                getActivity().runOnUiThread(() -> Toast.makeText(getActivity(), "Image and JSON sent via REST API", Toast.LENGTH_SHORT).show());
+
+            } catch (IOException e) {
+                Log.e("REST API", "Error encoding image or sending JSON: " + e.getMessage());
+                Log.e("REST API", payload.toString());
+                getActivity().runOnUiThread(() -> Toast.makeText(getActivity(), "Failed to send image and JSON", Toast.LENGTH_SHORT).show());
+            }
+        });
+    }
+
+    // Method to send JSON object to the server
+    private void sendJsonToServer(JSONObject jsonObject) throws IOException {
+        URL url = new URL(SERVER_URL);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json; utf-8");
+        conn.setRequestProperty("Accept", "application/json");
+        conn.setRequestProperty("User-Agent", "Java HttpURLConnection");
+        conn.setDoOutput(true);
+
+        OutputStream os = conn.getOutputStream();
+        byte[] input = jsonObject.toString().getBytes(StandardCharsets.UTF_8);
+        os.write(input, 0, input.length);
+        os.close();
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            Log.i("REST API", "Image successfully uploaded");
+        } else {
+            Log.e("REST API", "Failed to upload image, response code: " + responseCode);
+        }
+        conn.disconnect();
+    }
+
 
     @Override
     public void onDestroy() {

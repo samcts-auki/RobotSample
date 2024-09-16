@@ -3,11 +3,14 @@ package com.ainirobot.robotos.fragment;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.os.Bundle;
 import android.os.RemoteException;
+import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
@@ -16,6 +19,9 @@ import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.Toast;
 import android.widget.LinearLayout;
+import android.provider.MediaStore;
+import android.net.Uri;
+import android.content.Intent;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -28,25 +34,40 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.core.content.FileProvider;
 
 import com.ainirobot.coreservice.client.Definition;
 import com.ainirobot.coreservice.client.RobotApi;
 import com.ainirobot.coreservice.client.listener.ActionListener;
+import com.ainirobot.coreservice.client.listener.CommandListener;
 import com.ainirobot.robotos.LogTools;
 import com.ainirobot.robotos.R;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.json.JSONObject;
+import org.json.JSONException;
+
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.HashMap;
+import java.util.Map;
 
 
 public class PhotoTaskFragment extends BaseFragment {
 
     private static final int CAMERA_REQUEST_CODE = 1001;
+    private static final int REQUEST_IMAGE_CAPTURE = 1;
 
     private Spinner cameraSelectorSpinner;
     private ProcessCameraProvider cameraProvider;
@@ -57,12 +78,18 @@ public class PhotoTaskFragment extends BaseFragment {
     private CameraSelector cameraSelector;
     private ExecutorService cameraExecutor;
 
+    private String currentDest;
+
+    private static int reqId = 0;
+
+    private Map<String, Integer> waypoint_map = new HashMap<>();
+
     public static Fragment newInstance() {
         return new PhotoTaskFragment();
     }
 
     // Example Java array
-    String[] poseList = {"item1", "item2"};
+    private static final String SERVER_URL = "http://192.168.8.148:8080"; // Replace with your server's URL
 
     @Override
     public View onCreateView(Context context) {
@@ -80,7 +107,7 @@ public class PhotoTaskFragment extends BaseFragment {
         LinearLayout buttonContainer = root.findViewById(R.id.button_container);
 
         List<com.ainirobot.coreservice.client.actionbean.Pose> placeList =  RobotApi.getInstance().getPlaceList();
-
+        Log.d("placeList Length", "Length of list: " + placeList.size());
         // Dynamically create buttons based on the array
         for (com.ainirobot.coreservice.client.actionbean.Pose item : placeList) {
             Button button = new Button(getActivity());
@@ -92,6 +119,13 @@ public class PhotoTaskFragment extends BaseFragment {
             // Add the button to the container
             buttonContainer.addView(button);
         }
+
+        RobotApi.getInstance().moveHead(reqId++, "absolute", "absolute", 0, 90, mMotionListener);
+
+        waypoint_map.put("shelf_1", 1);
+        waypoint_map.put("shelf_2", 2);
+        waypoint_map.put("shelf_3", 3);
+
         return root;
     }
 
@@ -153,23 +187,32 @@ public class PhotoTaskFragment extends BaseFragment {
 
         // You can call other functions here with `input` as a parameter
         // Example: someFunction(input);
-        RobotApi.getInstance().startNavigation(0, input, 1.5, 10 * 1000, mNavigationListener);
+        currentDest = input;
+        RobotApi.getInstance().startNavigation(0, input, 0.3, 10 * 1000, mNavigationListener);
+        Log.d("handleButtonClick", "after start navigation");
     }
 
-    private static ActionListener mNavigationListener = new ActionListener() {
+    private ActionListener mNavigationListener = new ActionListener() {
 
         @Override
         public void onResult(int status, String response) throws RemoteException {
-
             switch (status) {
                 case Definition.RESULT_OK:
                     if ("true".equals(response)) {
                         LogTools.info("startNavigation result: " + status + "(Navigation success)" + " message: " + response);
                         LogTools.info("startNavigation result: " + status + "(导航成功)" + " message: " + response);
+                        getActivity().runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                takePhoto();
+                            }
+                        });
+
                     } else {
                         LogTools.info("startNavigation result: " + status + "(Navigation failed)" + " message: " + response);
                         LogTools.info("startNavigation result: " + status + "(导航失败)" + " message: " + response);
                     }
+
                     break;
                 default:
                     break;
@@ -224,7 +267,15 @@ public class PhotoTaskFragment extends BaseFragment {
         }
     };
 
-
+    private CommandListener mMotionListener = new CommandListener() {
+        @Override
+        public void onResult(int result, String message) {
+            LogTools.info("result: " + result + " message:" + message);
+            if ("succeed".equals(message)) {
+            } else {
+            }
+        }
+    };
 //    Camera Stuff
 private void getAvailableCameras() {
     CameraManager cameraManager = (CameraManager) requireActivity().getSystemService(Context.CAMERA_SERVICE);
@@ -235,7 +286,7 @@ private void getAvailableCameras() {
 
         for (String cameraId : cameraIds) {
             CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
-
+//            Log.d("Camera Info", "Camera distortion: " +  characteristics.get(CameraCharacteristics.LENS_DISTORTION));
             // Check if the camera is front or rear
             int lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
             String cameraName = "";
@@ -314,7 +365,10 @@ private void getAvailableCameras() {
             public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
                 String msg = "Photo captured: " + photoFile.getAbsolutePath();
                 Log.d("CameraXApp", msg);
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+//                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+                if (waypoint_map.containsKey(currentDest)) {
+                    uploadImage(photoFile, waypoint_map.get(currentDest));
+                }
             }
 
             @Override
@@ -323,8 +377,80 @@ private void getAvailableCameras() {
                 Toast.makeText(requireContext(), "Capture failed: " + exception.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
+
     }
 
+
+    // Method to encode the image file into a Base64 string
+    private String encodeImageToBase64(File imageFile) throws IOException {
+        FileInputStream fis = new FileInputStream(imageFile);
+        Bitmap bitmap = BitmapFactory.decodeStream(fis);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos); // Compress the bitmap into JPEG format
+        byte[] imageBytes = baos.toByteArray();
+        return Base64.encodeToString(imageBytes, Base64.DEFAULT); // Encode to Base64
+    }
+
+    private void uploadImage(File imageFile, int waypoint_id) {
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        JSONObject payload = new JSONObject();
+        executor.execute(() -> {
+            try {
+                // Convert image to Base64 string
+                String base64Image = encodeImageToBase64(imageFile);
+
+                // Prepare JSON object
+                JSONObject metaData = new JSONObject();
+                try {
+                    metaData.put("camera_id",  "camera_1");
+                    metaData.put("waypoint_id", waypoint_id);
+                    metaData.put("pose", null);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+
+                try {
+                    payload.put("metadata", metaData);
+                    payload.put("image", base64Image);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                // Send JSON object to the server
+                sendJsonToServer(payload);
+                getActivity().runOnUiThread(() -> Toast.makeText(getActivity(), "Image and JSON sent via REST API", Toast.LENGTH_SHORT).show());
+
+            } catch (IOException e) {
+                Log.e("REST API", "Error encoding image or sending JSON: " + e.getMessage());
+                Log.e("REST API", payload.toString());
+                getActivity().runOnUiThread(() -> Toast.makeText(getActivity(), "Failed to send image and JSON", Toast.LENGTH_SHORT).show());
+            }
+        });
+    }
+
+    // Method to send JSON object to the server
+    private void sendJsonToServer(JSONObject jsonObject) throws IOException {
+        URL url = new URL(SERVER_URL);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json; utf-8");
+        conn.setRequestProperty("Accept", "application/json");
+        conn.setRequestProperty("User-Agent", "Java HttpURLConnection");
+        conn.setDoOutput(true);
+
+        OutputStream os = conn.getOutputStream();
+        byte[] input = jsonObject.toString().getBytes(StandardCharsets.UTF_8);
+        os.write(input, 0, input.length);
+        os.close();
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            Log.i("REST API", "Image successfully uploaded");
+        } else {
+            Log.e("REST API", "Failed to upload image, response code: " + responseCode);
+        }
+        conn.disconnect();
+    }
 
 
     @Override

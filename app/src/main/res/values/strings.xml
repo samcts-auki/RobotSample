@@ -95,5 +95,5 @@
     <string name="btn_capture">Capture</string>
     <string name="btn_confirm">Confirm</string>
     <string name="btn_cancel">Cancel</string>
-
+    <string name="photo_task_ability">Photo Task</string>
 </resources>
